@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>베이스 지판 훈련</title>
+    <!-- Tailwind CSS 로드 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js 오디오 라이브러리 로드 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <!-- Google Fonts 로드 -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* 기본 폰트 설정 */
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            -webkit-tap-highlight-color: transparent; /* 모바일 클릭 시 하이라이트 제거 */
+        }
+        /* 프렛보드 인레이(점) 스타일 */
+        .inlay-dot::after {
+            content: '';
+            position: absolute;
+            width: 25%;
+            height: 25%;
+            background-color: #9ca3af; /* gray-400 */
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+        }
+        /* 12프렛 더블 인레이 스타일 */
+        .double-inlay-dot::before, .double-inlay-dot::after {
+            content: '';
+            position: absolute;
+            width: 25%;
+            height: 25%;
+            background-color: #9ca3af; /* gray-400 */
+            border-radius: 50%;
+            left: 50%;
+            transform: translateX(-50%);
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+        }
+        .double-inlay-dot::before { top: 25%; transform: translate(-50%, -50%); }
+        .double-inlay-dot::after { top: 75%; transform: translate(-50%, -50%);}
+
+        /* 프렛 클릭 시 피드백 효과 */
+        .feedback-correct {
+            background-color: rgba(74, 222, 128, 0.7) !important; /* green-400 with opacity */
+            transition: background-color 0.1s ease-in-out;
+        }
+        .feedback-incorrect {
+            background-color: rgba(248, 113, 113, 0.7) !important; /* red-400 with opacity */
+            transition: background-color 0.1s ease-in-out;
+        }
+        /* 비활성화된 버튼 스타일 */
+        button:disabled {
+            background-color: #4b5563; /* gray-600 */
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body class="bg-gray-800 text-white flex flex-col items-center justify-center min-h-screen p-2 sm:p-4">
+
+    <div class="w-full max-w-7xl mx-auto">
+        <header class="text-center mb-4">
+            <h1 class="text-3xl sm:text-4xl font-bold text-cyan-400">베이스 지판 암기 훈련</h1>
+            <p class="text-gray-400 mt-2">들려주는 음을 듣고 올바른 위치를 지판에서 찾아보세요.</p>
+        </header>
+
+        <!-- 컨트롤 및 상태 패널 -->
+        <div class="bg-gray-900 shadow-lg rounded-lg p-4 mb-6 flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
+            <button id="startButton" class="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-6 rounded-lg transition-all w-full sm:w-auto text-lg">
+                훈련 시작
+            </button>
+            
+            <div class="flex flex-col items-center space-y-2">
+                <div id="status" class="text-xl sm:text-2xl font-semibold text-yellow-400 h-8 text-center flex items-center justify-center">&nbsp;</div>
+                <!-- *** 수정된 부분: 자동 진행 체크박스 추가 *** -->
+                <div class="flex items-center space-x-2 text-gray-300">
+                    <input type="checkbox" id="autoNextCheckbox" class="h-4 w-4 rounded bg-gray-700 border-gray-600 text-cyan-500 focus:ring-cyan-600" checked>
+                    <label for="autoNextCheckbox" class="cursor-pointer select-none">다음 문제로 자동으로 넘어가기</label>
+                </div>
+            </div>
+
+            <div class="text-lg sm:text-xl">
+                <span class="text-gray-400">점수:</span>
+                <span id="score" class="font-bold text-white w-12 inline-block text-center">0</span>
+            </div>
+        </div>
+
+        <!-- 프렛보드 컨테이너 -->
+        <div id="fretboard-container" class="bg-gray-700 p-2 sm:p-4 rounded-lg shadow-2xl overflow-x-auto select-none">
+            <!-- 프렛보드는 JavaScript로 생성됩니다 -->
+        </div>
+    </div>
+
+    <script>
+        // --- DOM 요소 참조 ---
+        const startButton = document.getElementById('startButton');
+        const statusEl = document.getElementById('status');
+        const scoreEl = document.getElementById('score');
+        const fretboardContainer = document.getElementById('fretboard-container');
+        const autoNextCheckbox = document.getElementById('autoNextCheckbox');
+
+        // --- 상수 정의 ---
+        const FRET_COUNT = 13;
+        const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const STRING_TUNINGS = ['G2', 'D2', 'A1', 'E1'];
+        const INLAY_FRETS = [3, 5, 7, 9];
+        const DOUBLE_INLAY_FRET = 12;
+
+        // --- 상태 변수 ---
+        let synth;
+        let currentQuestion = null;
+        let score = 0;
+        let isGameActive = false;
+        let isProcessing = false;
+
+        // --- 함수 ---
+
+        function getNote(stringIndex, fret) {
+            const openStringNote = STRING_TUNINGS[stringIndex];
+            const noteName = openStringNote.slice(0, -1);
+            const octave = parseInt(openStringNote.slice(-1));
+            const startNoteIndex = NOTES.indexOf(noteName);
+            const targetNoteIndex = (startNoteIndex + fret) % NOTES.length;
+            const octaveOffset = Math.floor((startNoteIndex + fret) / NOTES.length);
+            return NOTES[targetNoteIndex] + (octave + octaveOffset);
+        }
+
+        function createFretboard() {
+            const fretboard = document.createElement('div');
+            fretboard.className = 'relative flex flex-col';
+            const fretNumbersRow = document.createElement('div');
+            fretNumbersRow.className = 'flex';
+            const emptyNut = document.createElement('div');
+            emptyNut.className = 'w-12 flex-shrink-0';
+            fretNumbersRow.appendChild(emptyNut);
+            const fretsContainer = document.createElement('div');
+            fretsContainer.className = 'flex-grow flex h-40 sm:h-48';
+            for (let fret = 0; fret <= FRET_COUNT; fret++) {
+                const fretEl = document.createElement('div');
+                const isNut = fret === 0;
+                fretEl.className = `relative flex-1 flex flex-col border-r-2 ${isNut ? 'border-l-4 border-gray-400 w-12 flex-shrink-0 flex-grow-0' : 'border-gray-500'}`;
+                fretEl.style.minWidth = isNut ? '48px' : '80px';
+                for (let stringIndex = 0; stringIndex < STRING_TUNINGS.length; stringIndex++) {
+                    const stringPosEl = document.createElement('div');
+                    stringPosEl.className = 'relative h-1/4 w-full cursor-pointer flex items-center justify-center group';
+                    stringPosEl.dataset.string = stringIndex;
+                    stringPosEl.dataset.fret = fret;
+                    const line = document.createElement('div');
+                    line.className = 'absolute w-full bg-gray-400 group-hover:bg-cyan-300 transition-colors';
+                    line.style.height = `${stringIndex + 2}px`;
+                    line.style.boxShadow = '0 1px 3px rgba(0,0,0,0.5)';
+                    stringPosEl.appendChild(line);
+                    fretEl.appendChild(stringPosEl);
+                }
+                if (INLAY_FRETS.includes(fret)) fretEl.classList.add('inlay-dot');
+                if (fret === DOUBLE_INLAY_FRET) fretEl.classList.add('double-inlay-dot');
+                fretsContainer.appendChild(fretEl);
+                if (fret > 0) {
+                    const fretNumberEl = document.createElement('div');
+                    fretNumberEl.className = 'flex-1 text-center pt-2 text-gray-400';
+                    fretNumberEl.style.minWidth = '80px';
+                    fretNumberEl.textContent = fret;
+                    fretNumbersRow.appendChild(fretNumberEl);
+                }
+            }
+            fretboard.appendChild(fretsContainer);
+            fretboard.appendChild(fretNumbersRow);
+            fretboardContainer.appendChild(fretboard);
+        }
+
+        function askNewQuestion() {
+            isProcessing = true;
+            startButton.disabled = true;
+            document.querySelectorAll('.feedback-correct, .feedback-incorrect').forEach(el => {
+                el.classList.remove('feedback-correct', 'feedback-incorrect');
+            });
+            const randomString = Math.floor(Math.random() * STRING_TUNINGS.length);
+            const randomFret = Math.floor(Math.random() * FRET_COUNT);
+            const noteToGuess = getNote(randomString, randomFret);
+            currentQuestion = { note: noteToGuess };
+            const noteDisplayName = noteToGuess.slice(0, -1);
+            statusEl.textContent = `"${noteDisplayName}" 음을 찾으세요`;
+            if (synth) synth.triggerAttackRelease(currentQuestion.note, '4n', Tone.now());
+            isProcessing = false;
+            startButton.disabled = false;
+        }
+        
+        function highlightAllCorrectNotes(correctNoteName) {
+            const allPositions = document.querySelectorAll('[data-fret]');
+            allPositions.forEach(posEl => {
+                const { string, fret } = posEl.dataset;
+                const note = getNote(parseInt(string), parseInt(fret));
+                const noteName = note.slice(0, -1);
+                if (noteName === correctNoteName) {
+                    posEl.classList.add('feedback-correct');
+                }
+            });
+        }
+
+        function handleFretClick(e) {
+            if (!isGameActive || isProcessing || !e.target.closest('[data-fret]')) return;
+            
+            isProcessing = true;
+            startButton.disabled = true;
+            const clickedEl = e.target.closest('[data-fret]');
+            const { string, fret } = clickedEl.dataset;
+            const clickedNote = getNote(parseInt(string), parseInt(fret));
+            
+            if (synth) {
+                synth.triggerAttackRelease(clickedNote, '4n', Tone.now());
+            }
+
+            const clickedNoteName = clickedNote.slice(0, -1);
+            const correctNoteName = currentQuestion.note.slice(0, -1);
+
+            if (clickedNoteName === correctNoteName) {
+                score++;
+                scoreEl.textContent = score;
+                statusEl.textContent = '정답입니다!';
+                highlightAllCorrectNotes(correctNoteName);
+            } else {
+                statusEl.textContent = '오답!';
+                clickedEl.classList.add('feedback-incorrect');
+                highlightAllCorrectNotes(correctNoteName);
+                if(synth) {
+                    const root = Tone.Frequency(currentQuestion.note).toMidi();
+                    synth.triggerAttackRelease([root, root+1], "16n");
+                }
+            }
+
+            // *** 수정된 부분: 체크박스 상태에 따라 다음 문제 진행 결정 ***
+            if (autoNextCheckbox.checked) {
+                setTimeout(() => {
+                    askNewQuestion();
+                }, 1500);
+            } else {
+                isProcessing = false;
+                startButton.disabled = false;
+            }
+        }
+
+        async function startGame() {
+            if (!synth) {
+                await Tone.start();
+                synth = new Tone.PolySynth(Tone.FMSynth, {
+                    volume: 10,
+                    harmonicity: 1.01, 
+                    modulationIndex: 3.5,
+                    envelope: {
+                        attack: 0.01,
+                        decay: 0.3,
+                        sustain: 0.1,
+                        release: 1.2,
+                    },
+                    modulationEnvelope: {
+                        attack: 0.01,
+                        decay: 0.5,
+                        sustain: 0,
+                        release: 0.8,
+                    },
+                }).toDestination();
+            }
+            isGameActive = true;
+            score = 0;
+            scoreEl.textContent = score;
+            // *** 수정된 부분: 버튼 텍스트 변경 ***
+            startButton.textContent = '다음 문제';
+            askNewQuestion();
+        }
+
+        startButton.addEventListener('click', () => {
+             if (isProcessing || startButton.disabled) return;
+             if (!isGameActive) {
+                startGame();
+             } else {
+                // *** 수정된 부분: 게임 중 버튼 클릭은 항상 다음 문제 출제 ***
+                askNewQuestion();
+             }
+        });
+        fretboardContainer.addEventListener('click', handleFretClick);
+
+        createFretboard();
+    </script>
+</body>
+</html>
