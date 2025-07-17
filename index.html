@@ -126,7 +126,6 @@
             </div>
         </div>
         
-        <!-- *** 수정된 부분: 스크롤바 길이 조정 *** -->
         <div class="w-56 mx-auto mt-4">
              <input type="range" id="fretboardScroller" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" min="0" max="100" value="0">
         </div>
@@ -157,7 +156,6 @@
         let isProcessing = false;
         let noteBeingHeld = null;
         let heldFretElement = null;
-        // *** 수정된 부분: 점수 중복 방지 플래그 추가 ***
         let questionAnswered = false;
 
         // --- 함수 ---
@@ -230,7 +228,6 @@
         function askNewQuestion() {
             isProcessing = true;
             startButton.disabled = true;
-            // *** 수정된 부분: 새 문제 시작 시 점수 플래그 초기화 ***
             questionAnswered = false;
             document.querySelectorAll('.feedback-correct, .feedback-incorrect').forEach(el => {
                 el.classList.remove('feedback-correct', 'feedback-incorrect');
@@ -271,7 +268,6 @@
             const clickedNote = getNote(parseInt(string), parseInt(fret));
             
             if (synth) {
-                synth.envelope.attack = 0.02; 
                 synth.triggerAttack(clickedNote, Tone.now());
                 noteBeingHeld = clickedNote;
                 heldFretElement = clickedEl;
@@ -285,7 +281,6 @@
             const correctNoteName = currentQuestion.note.slice(0, -1);
 
             if (clickedNoteName === correctNoteName) {
-                // *** 수정된 부분: 점수 중복 방지 로직 추가 ***
                 if (!questionAnswered) {
                     score++;
                     scoreEl.textContent = score;
@@ -294,7 +289,7 @@
                 statusEl.textContent = '정답입니다!';
                 highlightAllCorrectNotes(correctNoteName);
             } else {
-                if (questionAnswered) { // 이미 정답을 맞췄으면 오답 표시는 하지 않음
+                if (questionAnswered) { 
                     isProcessing = false;
                     startButton.disabled = false;
                     return;
@@ -362,18 +357,19 @@
                 masterVolume = new Tone.Volume(volumeSlider.value).toDestination();
                 const compressor = new Tone.Compressor(-12, 4).connect(masterVolume);
                 
+                // *** 수정된 부분: 노이즈 제거를 위해 attack 값 조정 ***
                 synth = new Tone.MonoSynth({
                     portamento: 0.02,
                     oscillator: { type: "sawtooth" },
                     envelope: {
-                        attack: 0.02,
+                        attack: 0.05, // 찢어지는 소리(클릭)를 줄이기 위해 attack을 약간 늘림
                         decay: 0.1,
                         sustain: 0.4,
                         release: 10,
                     },
                     filter: { Q: 1, type: "lowpass", rolloff: -12 },
                     filterEnvelope: {
-                        attack: 0.01,
+                        attack: 0.02, // 필터 엔벨로프 attack도 함께 조정
                         decay: 0.2,
                         sustain: 0,
                         release: 0.8,
