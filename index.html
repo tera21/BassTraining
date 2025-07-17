@@ -57,6 +57,14 @@
             background-color: #4b5563;
             cursor: not-allowed;
         }
+        /* *** 수정된 부분: 수직 볼륨 슬라이더 스타일 *** */
+        #volumeSlider {
+            -webkit-appearance: slider-vertical; /* Chrome, Safari, Opera, Edge */
+            writing-mode: bt-lr; /* Firefox */
+            width: 1rem;
+            height: 128px; /* h-32 */
+            cursor: pointer;
+        }
     </style>
 </head>
 <body class="bg-gray-800 text-white flex flex-col items-center justify-center min-h-screen p-2 sm:p-4">
@@ -87,9 +95,17 @@
             </div>
         </div>
 
-        <!-- 프렛보드 컨테이너 -->
-        <div id="fretboard-container" class="overflow-x-auto select-none">
-            <!-- 프렛보드는 JavaScript로 생성됩니다 -->
+        <!-- *** 수정된 부분: 지판과 볼륨 슬라이더를 감싸는 컨테이너 추가 *** -->
+        <div class="flex items-center justify-center gap-4 sm:gap-8">
+            <!-- 프렛보드 컨테이너 -->
+            <div id="fretboard-container" class="flex-grow overflow-x-auto select-none">
+                <!-- 프렛보드는 JavaScript로 생성됩니다 -->
+            </div>
+            <!-- 볼륨 슬라이더 컨테이너 -->
+            <div class="flex flex-col items-center space-y-2">
+                <input type="range" id="volumeSlider" min="-40" max="6" value="-5" step="1">
+                <label for="volumeSlider" class="text-gray-400">Volume</label>
+            </div>
         </div>
     </div>
 
@@ -100,6 +116,7 @@
         const scoreEl = document.getElementById('score');
         const fretboardContainer = document.getElementById('fretboard-container');
         const autoNextCheckbox = document.getElementById('autoNextCheckbox');
+        const volumeSlider = document.getElementById('volumeSlider');
 
         // --- 상수 정의 ---
         const FRET_COUNT = 13;
@@ -109,11 +126,13 @@
         const DOUBLE_INLAY_FRET = 12;
 
         // --- 상태 변수 ---
-        let synth;
+        let synth, masterVolume;
         let currentQuestion = null;
         let score = 0;
         let isGameActive = false;
         let isProcessing = false;
+        let noteBeingHeld = null;
+        let heldFretElement = null;
 
         // --- 함수 ---
 
@@ -137,7 +156,7 @@
             fretNumbersRow.appendChild(emptyNut);
             const fretsContainer = document.createElement('div');
             
-            fretsContainer.className = 'flex-grow flex h-32 sm:h-36 rounded-md shadow-inner';
+            fretsContainer.className = 'flex-grow inline-flex h-32 sm:h-36 rounded-md shadow-inner';
             fretsContainer.style.backgroundColor = '#e4c69d';
             
             for (let fret = 0; fret <= FRET_COUNT; fret++) {
@@ -202,18 +221,28 @@
             });
         }
 
-        function handleFretClick(e) {
-            if (!isGameActive || isProcessing || !e.target.closest('[data-fret]')) return;
-            
-            isProcessing = true;
-            startButton.disabled = true;
+        function handleFretPress(e) {
+            if (e.type === 'touchstart') e.preventDefault();
+            if (!isGameActive || !e.target.closest('[data-fret]')) return;
+
+            if (noteBeingHeld && synth) {
+                synth.triggerRelease(Tone.now());
+            }
+
             const clickedEl = e.target.closest('[data-fret]');
             const { string, fret } = clickedEl.dataset;
             const clickedNote = getNote(parseInt(string), parseInt(fret));
             
             if (synth) {
-                synth.triggerAttackRelease(clickedNote, '4n', Tone.now());
+                synth.envelope.attack = 0.02; // 빠른 어택
+                synth.triggerAttack(clickedNote, Tone.now());
+                noteBeingHeld = clickedNote;
+                heldFretElement = clickedEl;
             }
+
+            if (isProcessing) return;
+            isProcessing = true;
+            startButton.disabled = true;
 
             const clickedNoteName = clickedNote.slice(0, -1);
             const correctNoteName = currentQuestion.note.slice(0, -1);
@@ -227,10 +256,6 @@
                 statusEl.textContent = '오답!';
                 clickedEl.classList.add('feedback-incorrect');
                 highlightAllCorrectNotes(correctNoteName);
-                if(synth) {
-                    const root = Tone.Frequency(currentQuestion.note).toMidi();
-                    synth.triggerAttackRelease([root, root+1], "16n");
-                }
             }
 
             if (autoNextCheckbox.checked) {
@@ -243,30 +268,66 @@
             }
         }
 
+        function handleFretRelease() {
+            if (synth && noteBeingHeld) {
+                synth.triggerRelease(Tone.now());
+                noteBeingHeld = null;
+                heldFretElement = null;
+            }
+        }
+
+        function handleFretSlide(e) {
+            if (!noteBeingHeld) return;
+            if (e.type === 'touchmove') e.preventDefault();
+
+            let clientX, clientY;
+            if (e.type === 'touchmove') {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            
+            const elementUnderPointer = document.elementFromPoint(clientX, clientY);
+            if (!elementUnderPointer) return;
+
+            const currentFretEl = elementUnderPointer.closest('[data-fret]');
+            if (!currentFretEl || currentFretEl === heldFretElement) return;
+
+            const { string, fret } = currentFretEl.dataset;
+            const heldString = heldFretElement.dataset.string;
+
+            if (string === heldString) {
+                const newNote = getNote(parseInt(string), parseInt(fret));
+                if (newNote !== noteBeingHeld) {
+                    if (synth) {
+                        synth.setNote(newNote, Tone.now());
+                    }
+                    noteBeingHeld = newNote;
+                    heldFretElement = currentFretEl;
+                }
+            }
+        }
+
         async function startGame() {
             if (!synth) {
                 await Tone.start();
-                // *** 수정된 부분: 사운드 품질 개선 ***
-                // 컴프레서를 추가하여 사운드를 더 펀치감 있게 만듭니다.
-                const compressor = new Tone.Compressor(-12, 4).toDestination();
+                // *** 수정된 부분: 마스터 볼륨 노드 추가 ***
+                masterVolume = new Tone.Volume(volumeSlider.value).toDestination();
+                const compressor = new Tone.Compressor(-12, 4).connect(masterVolume);
                 
-                // MonoSynth를 사용하여 더 클래식한 베이스 사운드를 만듭니다.
-                synth = new Tone.PolySynth(Tone.MonoSynth, {
-                    volume: -8, // 컴프레서가 볼륨을 키워주므로 초기 볼륨은 낮춥니다.
-                    oscillator: {
-                        type: "sawtooth" // 더 풍부한 배음을 가진 파형
-                    },
+                // *** 수정된 부분: 실제 베이스와 유사한 긴 release를 가진 envelope 설정 ***
+                synth = new Tone.MonoSynth({
+                    portamento: 0.02,
+                    oscillator: { type: "sawtooth" },
                     envelope: {
                         attack: 0.02,
                         decay: 0.1,
-                        sustain: 0.2,
-                        release: 0.6,
+                        sustain: 0.4,
+                        release: 10, // 10초에 걸쳐 자연스럽게 소멸
                     },
-                    filter: {
-                        Q: 1,
-                        type: "lowpass",
-                        rolloff: -12
-                    },
+                    filter: { Q: 1, type: "lowpass", rolloff: -12 },
                     filterEnvelope: {
                         attack: 0.01,
                         decay: 0.2,
@@ -292,7 +353,21 @@
                 askNewQuestion();
              }
         });
-        fretboardContainer.addEventListener('click', handleFretClick);
+        
+        // *** 수정된 부분: 볼륨 슬라이더 이벤트 리스너 추가 ***
+        volumeSlider.addEventListener('input', (e) => {
+            if (masterVolume) {
+                masterVolume.volume.value = e.target.value;
+            }
+        });
+
+        fretboardContainer.addEventListener('mousedown', handleFretPress);
+        fretboardContainer.addEventListener('mouseup', handleFretRelease);
+        fretboardContainer.addEventListener('mouseleave', handleFretRelease);
+        fretboardContainer.addEventListener('mousemove', handleFretSlide);
+        fretboardContainer.addEventListener('touchstart', handleFretPress, { passive: false });
+        fretboardContainer.addEventListener('touchend', handleFretRelease);
+        fretboardContainer.addEventListener('touchmove', handleFretSlide, { passive: false });
 
         createFretboard();
     </script>
