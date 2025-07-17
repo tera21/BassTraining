@@ -126,7 +126,6 @@
             </div>
         </div>
         
-        <!-- *** 수정된 부분: 지판 좌우 스크롤바 컨테이너 너비 조정 *** -->
         <div class="w-full max-w-4xl mx-auto mt-4 px-2">
              <input type="range" id="fretboardScroller" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" min="0" max="100" value="0">
         </div>
@@ -181,8 +180,8 @@
             fretNumbersRow.appendChild(emptyNut);
             const fretsContainer = document.createElement('div');
             
-            // *** 수정된 부분: inline-flex를 flex로 변경하여 배경색 오류 수정 ***
-            fretsContainer.className = 'flex-grow flex h-32 sm:h-36 rounded-md shadow-inner';
+            // *** 수정된 부분: flex를 inline-flex로 변경하여 배경색 오류 수정 ***
+            fretsContainer.className = 'inline-flex h-32 sm:h-36 rounded-md shadow-inner';
             fretsContainer.style.backgroundColor = '#e4c69d';
             
             for (let fret = 0; fret <= FRET_COUNT; fret++) {
