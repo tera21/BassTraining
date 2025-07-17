@@ -172,7 +172,8 @@
         function createFretboard() {
             fretboardContainer.innerHTML = ''; // 기존 지판 초기화
             const fretboard = document.createElement('div');
-            fretboard.className = 'relative flex flex-col p-2';
+            // *** 수정된 부분: flex-col을 제거하고 inline-block으로 변경하여 너비가 내용에 맞게 확장되도록 함 ***
+            fretboard.className = 'relative inline-block p-2';
             const fretNumbersRow = document.createElement('div');
             fretNumbersRow.className = 'flex';
             const emptyNut = document.createElement('div');
@@ -180,8 +181,8 @@
             fretNumbersRow.appendChild(emptyNut);
             const fretsContainer = document.createElement('div');
             
-            // *** 수정된 부분: flex를 inline-flex로 변경하여 배경색 오류 수정 ***
-            fretsContainer.className = 'inline-flex h-32 sm:h-36 rounded-md shadow-inner';
+            // *** 수정된 부분: inline-flex를 flex로 변경 ***
+            fretsContainer.className = 'flex h-32 sm:h-36 rounded-md shadow-inner';
             fretsContainer.style.backgroundColor = '#e4c69d';
             
             for (let fret = 0; fret <= FRET_COUNT; fret++) {
