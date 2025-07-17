@@ -127,7 +127,7 @@
         </div>
         
         <!-- *** 수정된 부분: 스크롤바 길이 조정 *** -->
-        <div class="w-full max-w-md mx-auto mt-4 px-2">
+        <div class="w-56 mx-auto mt-4">
              <input type="range" id="fretboardScroller" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" min="0" max="100" value="0">
         </div>
     </div>
@@ -157,6 +157,8 @@
         let isProcessing = false;
         let noteBeingHeld = null;
         let heldFretElement = null;
+        // *** 수정된 부분: 점수 중복 방지 플래그 추가 ***
+        let questionAnswered = false;
 
         // --- 함수 ---
 
@@ -181,7 +183,6 @@
             fretNumbersRow.appendChild(emptyNut);
             const fretsContainer = document.createElement('div');
             
-            // *** 수정된 부분: 배경색 오류 수정을 위해 inline-flex 사용 ***
             fretsContainer.className = 'inline-flex h-32 sm:h-36 rounded-md shadow-inner';
             fretsContainer.style.backgroundColor = '#e4c69d';
             
@@ -229,6 +230,8 @@
         function askNewQuestion() {
             isProcessing = true;
             startButton.disabled = true;
+            // *** 수정된 부분: 새 문제 시작 시 점수 플래그 초기화 ***
+            questionAnswered = false;
             document.querySelectorAll('.feedback-correct, .feedback-incorrect').forEach(el => {
                 el.classList.remove('feedback-correct', 'feedback-incorrect');
             });
@@ -282,11 +285,20 @@
             const correctNoteName = currentQuestion.note.slice(0, -1);
 
             if (clickedNoteName === correctNoteName) {
-                score++;
-                scoreEl.textContent = score;
+                // *** 수정된 부분: 점수 중복 방지 로직 추가 ***
+                if (!questionAnswered) {
+                    score++;
+                    scoreEl.textContent = score;
+                    questionAnswered = true;
+                }
                 statusEl.textContent = '정답입니다!';
                 highlightAllCorrectNotes(correctNoteName);
             } else {
+                if (questionAnswered) { // 이미 정답을 맞췄으면 오답 표시는 하지 않음
+                    isProcessing = false;
+                    startButton.disabled = false;
+                    return;
+                }
                 statusEl.textContent = '오답!';
                 clickedEl.classList.add('feedback-incorrect');
                 highlightAllCorrectNotes(correctNoteName);
