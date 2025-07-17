@@ -65,7 +65,7 @@
             height: 128px; /* h-32 */
             cursor: pointer;
         }
-        /* *** 추가된 부분: 수평 지판 스크롤바 스타일 *** */
+        /* 수평 지판 스크롤바 스타일 */
         #fretboardScroller::-webkit-slider-thumb {
             -webkit-appearance: none;
             appearance: none;
@@ -126,8 +126,8 @@
             </div>
         </div>
         
-        <!-- *** 추가된 부분: 지판 좌우 스크롤바 *** -->
-        <div class="w-full max-w-5xl mx-auto mt-4 px-2">
+        <!-- *** 수정된 부분: 지판 좌우 스크롤바 컨테이너 너비 조정 *** -->
+        <div class="w-full max-w-4xl mx-auto mt-4 px-2">
              <input type="range" id="fretboardScroller" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" min="0" max="100" value="0">
         </div>
     </div>
@@ -181,7 +181,8 @@
             fretNumbersRow.appendChild(emptyNut);
             const fretsContainer = document.createElement('div');
             
-            fretsContainer.className = 'flex-grow inline-flex h-32 sm:h-36 rounded-md shadow-inner';
+            // *** 수정된 부분: inline-flex를 flex로 변경하여 배경색 오류 수정 ***
+            fretsContainer.className = 'flex-grow flex h-32 sm:h-36 rounded-md shadow-inner';
             fretsContainer.style.backgroundColor = '#e4c69d';
             
             for (let fret = 0; fret <= FRET_COUNT; fret++) {
@@ -218,11 +219,9 @@
             updateFretboardScroller();
         }
 
-        // *** 추가된 부분: 지판 스크롤바 업데이트 함수 ***
         function updateFretboardScroller() {
-            // 스크롤 가능한 너비를 계산합니다.
             const scrollableWidth = fretboardContainer.scrollWidth - fretboardContainer.clientWidth;
-            fretboardScroller.max = scrollableWidth;
+            fretboardScroller.max = scrollableWidth > 0 ? scrollableWidth : 0;
             fretboardScroller.value = fretboardContainer.scrollLeft;
         }
 
@@ -393,7 +392,6 @@
             }
         });
 
-        // *** 추가된 부분: 지판 스크롤바 이벤트 리스너 ***
         fretboardScroller.addEventListener('input', () => {
             fretboardContainer.scrollLeft = fretboardScroller.value;
         });
