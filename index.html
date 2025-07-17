@@ -57,13 +57,31 @@
             background-color: #4b5563;
             cursor: not-allowed;
         }
-        /* *** 수정된 부분: 수직 볼륨 슬라이더 스타일 *** */
+        /* 수직 볼륨 슬라이더 스타일 */
         #volumeSlider {
             -webkit-appearance: slider-vertical; /* Chrome, Safari, Opera, Edge */
             writing-mode: bt-lr; /* Firefox */
             width: 1rem;
             height: 128px; /* h-32 */
             cursor: pointer;
+        }
+        /* *** 추가된 부분: 수평 지판 스크롤바 스타일 *** */
+        #fretboardScroller::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 25px;
+            height: 25px;
+            background: #06b6d4; /* cyan-500 */
+            cursor: pointer;
+            border-radius: 50%;
+            margin-top: -10px; /* thumb 위치 조정 */
+        }
+        #fretboardScroller::-moz-range-thumb {
+            width: 25px;
+            height: 25px;
+            background: #06b6d4; /* cyan-500 */
+            cursor: pointer;
+            border-radius: 50%;
         }
     </style>
 </head>
@@ -95,7 +113,7 @@
             </div>
         </div>
 
-        <!-- *** 수정된 부분: 지판과 볼륨 슬라이더를 감싸는 컨테이너 추가 *** -->
+        <!-- 지판과 볼륨 슬라이더를 감싸는 컨테이너 -->
         <div class="flex items-center justify-center gap-4 sm:gap-8">
             <!-- 프렛보드 컨테이너 -->
             <div id="fretboard-container" class="flex-grow overflow-x-auto select-none">
@@ -107,6 +125,11 @@
                 <label for="volumeSlider" class="text-gray-400">Volume</label>
             </div>
         </div>
+        
+        <!-- *** 추가된 부분: 지판 좌우 스크롤바 *** -->
+        <div class="w-full max-w-5xl mx-auto mt-4 px-2">
+             <input type="range" id="fretboardScroller" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" min="0" max="100" value="0">
+        </div>
     </div>
 
     <script>
@@ -117,6 +140,7 @@
         const fretboardContainer = document.getElementById('fretboard-container');
         const autoNextCheckbox = document.getElementById('autoNextCheckbox');
         const volumeSlider = document.getElementById('volumeSlider');
+        const fretboardScroller = document.getElementById('fretboardScroller');
 
         // --- 상수 정의 ---
         const FRET_COUNT = 13;
@@ -147,6 +171,7 @@
         }
 
         function createFretboard() {
+            fretboardContainer.innerHTML = ''; // 기존 지판 초기화
             const fretboard = document.createElement('div');
             fretboard.className = 'relative flex flex-col p-2';
             const fretNumbersRow = document.createElement('div');
@@ -190,7 +215,17 @@
             fretboard.appendChild(fretsContainer);
             fretboard.appendChild(fretNumbersRow);
             fretboardContainer.appendChild(fretboard);
+            updateFretboardScroller();
         }
+
+        // *** 추가된 부분: 지판 스크롤바 업데이트 함수 ***
+        function updateFretboardScroller() {
+            // 스크롤 가능한 너비를 계산합니다.
+            const scrollableWidth = fretboardContainer.scrollWidth - fretboardContainer.clientWidth;
+            fretboardScroller.max = scrollableWidth;
+            fretboardScroller.value = fretboardContainer.scrollLeft;
+        }
+
 
         function askNewQuestion() {
             isProcessing = true;
@@ -234,7 +269,7 @@
             const clickedNote = getNote(parseInt(string), parseInt(fret));
             
             if (synth) {
-                synth.envelope.attack = 0.02; // 빠른 어택
+                synth.envelope.attack = 0.02; 
                 synth.triggerAttack(clickedNote, Tone.now());
                 noteBeingHeld = clickedNote;
                 heldFretElement = clickedEl;
@@ -313,11 +348,9 @@
         async function startGame() {
             if (!synth) {
                 await Tone.start();
-                // *** 수정된 부분: 마스터 볼륨 노드 추가 ***
                 masterVolume = new Tone.Volume(volumeSlider.value).toDestination();
                 const compressor = new Tone.Compressor(-12, 4).connect(masterVolume);
                 
-                // *** 수정된 부분: 실제 베이스와 유사한 긴 release를 가진 envelope 설정 ***
                 synth = new Tone.MonoSynth({
                     portamento: 0.02,
                     oscillator: { type: "sawtooth" },
@@ -325,7 +358,7 @@
                         attack: 0.02,
                         decay: 0.1,
                         sustain: 0.4,
-                        release: 10, // 10초에 걸쳐 자연스럽게 소멸
+                        release: 10,
                     },
                     filter: { Q: 1, type: "lowpass", rolloff: -12 },
                     filterEnvelope: {
@@ -354,12 +387,21 @@
              }
         });
         
-        // *** 수정된 부분: 볼륨 슬라이더 이벤트 리스너 추가 ***
         volumeSlider.addEventListener('input', (e) => {
             if (masterVolume) {
                 masterVolume.volume.value = e.target.value;
             }
         });
+
+        // *** 추가된 부분: 지판 스크롤바 이벤트 리스너 ***
+        fretboardScroller.addEventListener('input', () => {
+            fretboardContainer.scrollLeft = fretboardScroller.value;
+        });
+        fretboardContainer.addEventListener('scroll', () => {
+            fretboardScroller.value = fretboardContainer.scrollLeft;
+        });
+        window.addEventListener('resize', updateFretboardScroller);
+
 
         fretboardContainer.addEventListener('mousedown', handleFretPress);
         fretboardContainer.addEventListener('mouseup', handleFretRelease);
